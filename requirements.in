@@ -1,0 +1,13 @@
+pytest
+coverage
+pytest-cov
+pylint
+pyenchant
+pylint_requests
+pre-commit
+sphinx
+sphinx-rtd-theme
+recommonmark
+pip-tools
+
+requests

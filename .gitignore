@@ -1,0 +1,6 @@
+__pycache__
+.pytest_cache
+/.repo-reports/docs-preview
+.coverage
+.doctrees
+/venv
