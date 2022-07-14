@@ -1,0 +1,87 @@
+sudo snap install core
+sudo snap refresh core
+sudo snap install --classic certbot
+sudo snap set certbot trust-plugin-with-root=ok
+sudo snap install certbot-dns-cloudflare
+sudo mkdir -p /root/.secrets
+sudo nano /root/.secrets/cloudflare.ini
+	dns_cloudflare_api_token = xxxx
+
+sudo nano /root/.secrets/plasma.env
+	var1=111
+	var2=222
+
+sudo chmod 0700 /root/.secrets/
+sudo chmod 0400 /root/.secrets/cloudflare.ini
+sudo chmod 0400 /root/.secrets/plasma.env
+
+sudo certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.ini -d plasmacan-dev.com,*.plasmacan-dev.com --preferred-challenges dns-01
+sudo systemctl status snap.certbot.renew.timer
+sudo nano /etc/letsencrypt/renewal-hooks/deploy/nginx_reload.sh
+	#!/bin/bash
+	systemctl reload nginx
+sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/nginx_reload.sh
+
+
+sudo add-apt-repository ppa:maxmind/ppa
+sudo apt install geoipupdate
+sudo nano /etc/GeoIP.conf
+sudo geoipupdate -v
+
+
+sudo crontab -e
+	# Run GeoIP database update all the thuesday at 02:00
+	0 2 * * 2 /usr/bin/geoipupdate
+
+
+sudo apt-get install nginx
+sudo apt-get install libnginx-mod-http-headers-more-filter
+sudo rm /etc/nginx/sites-enabled/default
+sudo nano /etc/nginx/sites-available/plasmacan-dev.com
+	geoip2 /var/lib/GeoIP/GeoLite2-Country.mmdb {
+		auto_reload 1h;
+		$geoip2_data_country_code default=XX source=$remote_addr country iso_code;
+	}
+
+	proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=myzone0:10m inactive=24h max_size=1g;
+
+	server {
+		listen 80;
+		listen 443 ssl;
+		server_name plasmacan-dev.com;
+
+		location / {
+			proxy_pass http://127.0.0.1:8080;
+			proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+			proxy_set_header Host $host;
+			proxy_set_header X-Forwarded-Proto $scheme;
+			proxy_set_header CF-IPCountry $geoip2_data_country_code;
+			proxy_set_header CF-Connecting-IP $remote_addr;
+			proxy_set_header CF-Visitor "{\"scheme\":\"$scheme\"}";
+			proxy_set_header CF-Ray $request_id-XXX;
+			proxy_set_header X-Request-ID "";
+			more_set_headers 'Server: Plasma';
+			add_header CF-Cache-Status $upstream_cache_status;
+			add_header CF-Ray $request_id-XXX;
+			proxy_buffering        on;
+			proxy_cache            myzone0;
+		}
+
+		ssl_certificate /etc/letsencrypt/live/plasmacan-dev.com/fullchain.pem;
+		ssl_certificate_key /etc/letsencrypt/live/plasmacan-dev.com/privkey.pem;
+	}
+
+
+sudo ln -s /etc/nginx/sites-available/plasmacan-dev.com /etc/nginx/sites-enabled/
+
+sudo mkdir /var/cache/nginx
+sudo chown www-data:www-data /var/cache/nginx
+
+# test config:
+sudo nginx -t
+
+sudo systemctl restart nginx
+
+sudo apt-get install python3-pip ruby python3-enchant
+pip install pre-commit pyenchant
+pre-commit install

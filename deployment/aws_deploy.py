@@ -29,25 +29,25 @@ api_name = "plasmacan_api"
 
 def main():
 
-    create_bucket(bucket_name)
+    create_bucket()
 
-    print(f"processing layer directory")
+    print("processing layer directory")  # noqa: T001
     layer_obj, layer_digest = zipdir("tmp-layer")
 
-    print(f"processing code directory")
+    print("processing code directory")  # noqa: T001
     code_obj, code_digest = zipdir("tmp-code")
 
     layer_arn = publish_lambda_layer(layer_obj, layer_digest)
     function_arn = create_lambda(code_obj, code_digest, layer_arn)
     create_apigw(function_arn)
-    print("done!")
+    print("done!")  # noqa: T001
 
 
 def create_apigw(function_arn):
     resp = apigw_client.get_apis()
     for item in resp["Items"]:
         if item["Name"] == api_name:
-            print("skipping api gateway creation - already exists")
+            print("skipping api gateway creation - already exists")  # noqa: T001
             return
 
     resp = apigw_client.create_api(
@@ -79,9 +79,9 @@ def zipdir(src_dir):
     return (zip_buffer, sha.hexdigest())
 
 
-def create_bucket(bucket_name):
+def create_bucket():
 
-    print("getting account buckets")
+    print("getting account buckets")  # noqa: T001
     bucket_exists = False
     resp = s3_client.list_buckets()
     for bucket in resp["Buckets"]:
@@ -89,17 +89,17 @@ def create_bucket(bucket_name):
             bucket_exists = True
 
     if bucket_exists:
-        print("s3 bucket already exists, skipping")
+        print("s3 bucket already exists, skipping")  # noqa: T001
     else:
 
-        print("creating bucket")
+        print("creating bucket")  # noqa: T001
         s3_client.create_bucket(
             Bucket=bucket_name,
             ACL="private",
             CreateBucketConfiguration={"LocationConstraint": os.environ["AWS_DEFAULT_REGION"]},
         )
 
-        print("encrypting bucket")
+        print("encrypting bucket")  # noqa: T001
         s3_client.put_bucket_encryption(
             Bucket=bucket_name,
             ServerSideEncryptionConfiguration={
@@ -109,7 +109,7 @@ def create_bucket(bucket_name):
             },
         )
 
-        print("blocking all bucket public access")
+        print("blocking all bucket public access")  # noqa: T001
         s3_client.put_public_access_block(
             Bucket=bucket_name,
             PublicAccessBlockConfiguration={
@@ -127,7 +127,7 @@ def create_lambda_role():
             RoleName="LambdaBasicExecution",
             AssumeRolePolicyDocument=json.dumps(LambdaBasicExecution_role_policy),
         )
-        print(response)
+        print(response)  # noqa: T001
     except iam_client.exceptions.EntityAlreadyExistsException:
         pass
 
@@ -142,14 +142,14 @@ def publish_lambda_layer(layer_obj, layer_digest):
     resp = lambda_client.list_layer_versions(LayerName=f"{lambda_name}_layer")
     for version in resp["LayerVersions"]:
         if layer_digest in version["Description"]:
-            print("The layer has not changed. Skipping")
+            print("The layer has not changed. Skipping")  # noqa: T001
             layer_arn = version["LayerVersionArn"]
             return layer_arn
         else:
             layer_was_altered = True
-            print("The layer has changed")
+            print("The layer has changed")  # noqa: T001
 
-    print("uploading lambda layer")
+    print("uploading lambda layer")  # noqa: T001
     layer_path = f"{date_time}_layer.zip"
     s3_client.upload_fileobj(layer_obj, bucket_name, layer_path)
 
@@ -169,7 +169,7 @@ def publish_lambda_layer(layer_obj, layer_digest):
     )
     new_version = resp["Version"]
     layer_arn = resp["LayerVersionArn"]
-    print("published new layer")
+    print("published new layer")  # noqa: T001
 
     all_versions = []
     resp = lambda_client.list_layer_versions(LayerName=f"{lambda_name}_layer")
@@ -179,15 +179,15 @@ def publish_lambda_layer(layer_obj, layer_digest):
     if layer_was_altered:
         try:
             wait_until_function_ready()
-            print("updating function configuration with new layer")
+            print("updating function configuration with new layer")  # noqa: T001
             lambda_client.update_function_configuration(
                 FunctionName=lambda_name,
                 Layers=[layer_arn],
             )
         except lambda_client.exceptions.ResourceNotFoundException:
-            print("could not update function as it does not exist")
+            print("could not update function as it does not exist")  # noqa: T001
 
-    print("deleting old layer version")
+    print("deleting old layer version")  # noqa: T001
     for version in all_versions:
         if version != new_version:
             lambda_client.delete_layer_version(LayerName=f"{lambda_name}_layer", VersionNumber=version)
@@ -198,7 +198,7 @@ def wait_until_function_ready():
     while True:
         resp = lambda_client.get_function(FunctionName=lambda_name)
         if resp["Configuration"]["State"] != "Active" or resp["Configuration"]["LastUpdateStatus"] == "InProgress":
-            print("waiting for active lambda")
+            print("waiting for active lambda")  # noqa: T001
             time.sleep(1)
         else:
             break
@@ -213,25 +213,25 @@ def create_lambda(code_obj, code_digest, layer_arn):
     for function in resp["Functions"]:
         if function["FunctionName"] == lambda_name:
             function_already_exists = True
-            print("function already exists")
+            print("function already exists")  # noqa: T001
 
             function_arn = function["FunctionArn"]
             resp = lambda_client.list_tags(Resource=function_arn)
             if code_digest in resp["Tags"]["sha_digest"]:
-                print("Function code has not changed. Skipping")
+                print("Function code has not changed. Skipping")  # noqa: T001
                 function_code_changed = False
             else:
-                print("Function code has changed.")
+                print("Function code has changed.")  # noqa: T001
 
     if function_already_exists:
         if function_code_changed:
 
-            print("uploading new function code")
+            print("uploading new function code")  # noqa: T001
             s3_client.upload_fileobj(code_obj, bucket_name, code_path)
 
             wait_until_function_ready()
-            print("updating function code")
-            response = lambda_client.update_function_code(
+            print("updating function code")  # noqa: T001
+            lambda_client.update_function_code(
                 FunctionName=lambda_name,
                 S3Bucket=bucket_name,
                 S3Key=code_path,
@@ -241,21 +241,21 @@ def create_lambda(code_obj, code_digest, layer_arn):
                 ],
             )
 
-            print("tagging function with digest")
+            print("tagging function with digest")  # noqa: T001
             lambda_client.tag_resource(
                 Resource=function_arn,
                 Tags={"sha_digest": code_digest},
             )
 
     else:
-        print("uploading function code")
+        print("uploading function code")  # noqa: T001
         s3_client.upload_fileobj(code_obj, bucket_name, code_path)
 
-        print("creating lambda role")
+        print("creating lambda role")  # noqa: T001
         role_arn = create_lambda_role()
 
-        print("creating lambda function")
-        response = lambda_client.create_function(
+        print("creating lambda function")  # noqa: T001
+        lambda_client.create_function(
             FunctionName=lambda_name,
             Runtime="python3.9",
             Role=role_arn,
@@ -275,7 +275,7 @@ def create_lambda(code_obj, code_digest, layer_arn):
             },
         )
 
-        print("setting lambda permissions")
+        print("setting lambda permissions")  # noqa: T001
         resp = lambda_client.add_permission(
             FunctionName=lambda_name,
             StatementId="permit_apigateway_invoke",
